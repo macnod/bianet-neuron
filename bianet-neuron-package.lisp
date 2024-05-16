@@ -38,5 +38,3 @@
    y-coor
    z-coor
    ))
-
-   

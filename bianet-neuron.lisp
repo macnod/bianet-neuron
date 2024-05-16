@@ -53,7 +53,7 @@ CLOSE-LOG was called), then this function opens the log file, sets
   "Closes the file stream that was opened by OPEN-LOG. If a file stream
 is not open (if *LOG* is NIL), then this function does nothing and
 returns NIL. If a file stream is open (*LOG* contains a stream), then
-this fucntion closes the stream and returns T." 
+this fucntion closes the stream and returns T."
   (when *log*
     (close *log*)
     (setf *log* nil)
@@ -148,7 +148,7 @@ not open, this function does nothing."
 (defclass t-cx ()
   ((id :reader id :type integer :initform (next-cx-id))
    (source :reader source :initarg :source :type t-neuron
-          :initform (error ":source required"))
+           :initform (error ":source required"))
    (target :reader target :initarg :target :type t-neuron
            :initform (error ":target required"))
    (weight :accessor weight :initarg :weight :initform 0.1 :type single-float)
@@ -243,16 +243,16 @@ not open, this function does nothing."
 (defmethod activate ((neuron t-neuron))
   (loop
     while (enabled neuron)
-    do 
+    do
        (wait-on-gate (transfer-gate neuron))
        (when (enabled neuron)
          (transfer neuron)
-         (loop 
+         (loop
            for cx-node = (head (outgoing neuron)) then (next cx-node)
            while cx-node
            for cx = (value cx-node)
            for value = (* (output neuron) (weight cx))
-           for log = (dlog "~a: sending ~,4f to ~a" 
+           for log = (dlog "~a: sending ~,4f to ~a"
                            (id neuron) value (id (target cx)))
            do (excite (target cx) value)
               (incf (fire-count cx))))
@@ -274,8 +274,8 @@ not open, this function does nothing."
                       (momentum *default-momentum*))
   (with-mutex ((input-mtx source))
     (with-mutex ((input-mtx target))
-      (when (and 
-             (loop 
+      (when (and
+             (loop
                for cx-node = (head (outgoing source)) then (next cx-node)
                while cx-node
                for cx = (value cx-node)
@@ -287,7 +287,7 @@ not open, this function does nothing."
                for cx = (value cx-node)
                for cx-source = (source cx)
                never (= (id source) (id cx-source))))
-        (let ((cx (make-instance 't-cx 
+        (let ((cx (make-instance 't-cx
                                  :momentum momentum
                                  :learning-rate learning-rate
                                  :weight weight
@@ -315,7 +315,7 @@ not open, this function does nothing."
                  (return cx)))))
 
 (defmethod isolate ((neuron t-neuron))
-  (let ((source (loop 
+  (let ((source (loop
                   for cx-node = (head (incoming neuron)) then (next cx-node)
                   while cx-node
                   for cx = (value cx-node)
@@ -347,7 +347,7 @@ not open, this function does nothing."
         t))))
 
 (defmethod excite ((neurons list) (values list))
-  (loop for neuron in neurons 
+  (loop for neuron in neurons
         for value in values
         counting (excite neuron value)))
 
@@ -356,10 +356,10 @@ not open, this function does nothing."
   (incf (transfer-count neuron))
   (unless (biased neuron)
     (with-mutex ((input-mtx neuron))
-        (setf (input neuron) 0.0
-              (received neuron) 0)))
-    (with-mutex ((err-mtx neuron))
-      (setf (err neuron) 0.0)))
+      (setf (input neuron) 0.0
+            (received neuron) 0)))
+  (with-mutex ((err-mtx neuron))
+    (setf (err neuron) 0.0)))
 
 (defun list-neuron-threads ()
   (remove-if-not

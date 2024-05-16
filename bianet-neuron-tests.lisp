@@ -3,7 +3,7 @@
 (require :prove)
 (require :dc-dlist)
 (require :dc-eclectic)
-(defpackage :bianet-neuron-tests 
+(defpackage :bianet-neuron-tests
   (:use :cl :prove :dc-eclectic :bianet-neuron :dc-dlist :sb-thread))
 (in-package :bianet-neuron-tests)
 
@@ -43,7 +43,7 @@
 
   ;; Test recently created neurons and connections
   (is (length (list-cxs neurons)) 2 "2 connections in total")
-  (is (len (incoming (nth 0 neurons))) 0 
+  (is (len (incoming (nth 0 neurons))) 0
       "first neuron has 0 incoming connections")
   (is (len (outgoing (nth 0 neurons))) 1
       "first neuron has 1 outgoing connection")
@@ -57,7 +57,7 @@
       "third neuron has 0 outgoing connections")
   (ok (loop for neuron in neurons never (enabled neuron))
       "All neurons currently disabled")
-  (ok (loop for neuron in neurons 
+  (ok (loop for neuron in neurons
             never (bianet-neuron::activation-thread neuron))
       "No neuron has an activation thread")
   (ok (loop for neuron in neurons never (biased neuron))
@@ -76,29 +76,29 @@
 
   ;; Enable neurons
   (enable neurons)
-  (ok (loop for neuron in neurons 
+  (ok (loop for neuron in neurons
             always (and (enabled neuron)
                         (bianet-neuron::activation-thread neuron)))
       "All neurons enabled and each has activation thread")
   (ok (loop for neuron in neurons always (zerop (transfer-count neuron)))
       "No neurons have experienced transfer yet")
   (ok (loop for neuron in neurons always
-            (and (zerop (input neuron))
-                 (zerop (output neuron))))
+                                  (and (zerop (input neuron))
+                                       (zerop (output neuron))))
       "All neurons still have inputs and outputs set to 0")
   (is (sort (mapcar #'thread-name (list-neuron-threads)) #'string<)
       (sort (mapcar (lambda (a) (format nil "nt-~d" a)) neuron-id-range) #'string<)
       "list-neuron-threads returns a thread for each neuron")
-  (ok (loop for neuron in neurons 
+  (ok (loop for neuron in neurons
             always (thread-alive-p (bianet-neuron::activation-thread neuron)))
       "All neuron threads are alive")
-  
+
   ;; Excite input neuron nt-4
   (ok (excite (nth 0 neurons) 1.0) "Neuron nt-4 excited")
   (sleep 0.1)
   (ok (not (zerop (output (nth 0 neurons))))
       "Output of neuron nt-4 is no longer 0")
-  (is (transfer-count (nth 0 neurons)) 1 
+  (is (transfer-count (nth 0 neurons)) 1
       "Neuron nt-4 experienced a transfer")
   (ok (zerop (received (nth 0 neurons)))
       "Neuron nt-4 was excited but transfer cleared that")
@@ -124,6 +124,6 @@
   (is (transfer-count (nth 2 neurons)) 1 "Neuron nt-6 experienced a transfer")
   (ok (not (zerop (output (nth 2 neurons))))
       "Output of neuron nt-6 is no longer 0"))
-  
+
 
 (finalize)
