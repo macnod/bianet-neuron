@@ -13,6 +13,9 @@
 (defparameter *default-min-weight* -0.9)
 (defparameter *default-max-weight* 0.9)
 
+(defparameter *neuron-name-prefix* "n-")
+(defparameter *neuron-thread-name-prefix* "nt-")
+(defparameter *neuron-gate-name-prefix* "ng-")
 
 (defun next-neuron-id ()
   (with-mutex (*neuron-id-mutex*)
@@ -102,8 +105,10 @@ not open, this function does nothing."
            (optimize (speed 3) (safety 0)))
   (cond ((> x (the single-float 16.64)) (the single-float 1.0))
         ((< x (the single-float -88.7)) (the single-float 0.0))
-        ((< (the single-float (abs x)) (the single-float 1e-8)) (the single-float 0.5))
-        (t (/ (the single-float 1.0) (the single-float (1+ (the single-float (exp (- x)))))))))
+        ((< (the single-float (abs x)) (the single-float 1e-8))
+         (the single-float 0.5))
+        (t (/ (the single-float 1.0) 
+              (the single-float (1+ (the single-float (exp (- x)))))))))
 
 (defun logistic-slow (x)
   (cond ((> x 16.64) 1.0)
@@ -144,7 +149,10 @@ not open, this function does nothing."
         :relu (list :function #'relu
                     :derivative #'relu-derivative)
         :relu-leaky (list :function #'relu-leaky
-                          :derivative #'relu-leaky-derivative)))
+                          :derivative #'relu-leaky-derivative)
+        :biased (list :function (lambda (x) (declare (ignore x)) (relu 1.0))
+                      :derivative #'relu-derivative)))
+
 (defclass t-cx ()
   ((id :reader id :type integer :initform (next-cx-id))
    (source :reader source :initarg :source :type t-neuron
@@ -173,92 +181,124 @@ not open, this function does nothing."
    (transfer-function :accessor transfer-function :type function)
    (transfer-derivative :accessor transfer-derivative :type function)
    (output :accessor output :type single-float :initform 0.0)
-   (expected-output :accessor expected-output :type single-float :initform 0.0)
    (err :accessor err :type single-float :initform 0.0)
-   (err-derivative :accessor err-derivative :type single-float :initform 0.0)
-   (x-coor :accessor x-coor :type single-float :initarg :x :initform 0.0)
-   (y-coor :accessor y-coor :type single-float :initarg :y :initform 0.0)
-   (z-coor :accessor z-coor :type single-float :initarg :z :initform 0.0)
-   (received :accessor received :type integer :initform 0)
+   (err-input :accessor err-input :type single-float :initform 0.0)
+   (excitation-count :accessor excitation-count :type integer :initform 0)
+   (modulation-count :accessor modulation-count :type integer :initform 0)
+   (excited :accessor excited :type boolean :initform nil)
+   (modulated :accessor modulated :type boolean :initform nil)
    (incoming :accessor incoming :type dlist :initform (make-instance 'dlist))
    (outgoing :accessor outgoing :type dlist :initform (make-instance 'dlist))
-   (transfer-gate :accessor transfer-gate)
+   (gate :accessor gate)
    (enabled :accessor enabled :type boolean :initform nil)
-   (activation-thread :accessor activation-thread :initform nil)
-   (activation-count :accessor activation-count :type integer :initform 0)
-   (transfer-count :accessor transfer-count :type integer :initform 0)
+   (neuron-thread :accessor neuron-thread :initform nil)
+   (ff-count :accessor ff-count :type integer :initform 0)
+   (bp-count :accessor bp-count :type integer :initform 0)
    (input-mtx :reader input-mtx :initform (make-mutex))
-   (output-mtx :reader output-mtx :initform (make-mutex))
-   (err-mtx :reader err-mtx :initform (make-mutex))
-   (err-der-mtx :reader err-der-mtx :initform (make-mutex))))
+   (err-input-mtx :reader err-input-mtx :initform (make-mutex))))
+
+(defmethod make-neuron-name ((neuron t-neuron))
+  (format nil "~a~:d" *neuron-name-prefix* (id neuron)))
+
+(defmethod make-neuron-thread-name ((neuron t-neuron))
+  (format nil "~a~:d" *neuron-thread-name-prefix* (id neuron)))
+
+(defmethod make-neuron-gate-name ((neuron t-neuron))
+  (format nil "~a~:d" *neuron-gate-name-prefix* (id neuron)))
 
 (defmethod initialize-instance :after ((neuron t-neuron) &key)
   (when (zerop (length (name neuron)))
-    (setf (name neuron) (format nil "n-~:d" (id neuron))))
-  (when (biased neuron)
-    (setf (input neuron) 1.0))
-  (let ((transfer (getf *transfer-functions* (transfer-key neuron))))
+    (setf (name neuron) (make-neuron-name neuron)))
+  (let ((transfer (getf *transfer-functions* 
+                        (if (biased neuron) :biased (transfer-key neuron)))))
     (setf (transfer-function neuron)
           (getf transfer :function)
           (transfer-derivative neuron)
           (getf transfer :derivative)))
-  (let ((gate-name (format nil "ng-~:d" (id neuron))))
-    (setf (transfer-gate neuron) (make-gate :name gate-name :open nil))))
+  (setf (gate neuron) 
+        (make-gate :name (make-neuron-gate-name neuron) :open nil)))
 
 (defmethod enable ((neuron t-neuron))
-  (when (and (not (enabled neuron))
-             (or (not (activation-thread neuron))
-                 (not (thread-alive-p (activation-thread neuron)))))
-    (let ((name (format nil "nt-~:d" (id neuron))))
-      (setf (enabled neuron) t)
-      (close-gate (transfer-gate neuron))
-      (setf (received neuron) 0)
-      (setf (activation-thread neuron)
-            (make-thread (lambda () (activate neuron)) :name name))
-      name)))
+  (when (and (not (enabled neuron)))
+    (when (neuron-thread neuron)
+      (when (thread-alive-p (neuron-thread neuron))
+        (error "Neuron thread ~a is running while neuron not enabled"
+               (thread-name (neuron-thread neuron))))
+      (terminate-thread (neuron-thread neuron)))
+    (close-gate (gate neuron))
+    (setf (enabled neuron) t
+          (excited neuron) nil
+          (modulated neuron) nil
+          (excitation-count neuron) 0
+          (modulation-count neuron) 0
+          (ff-count neuron) 0
+          (bp-count neuron) 0
+          (neuron-thread neuron) (make-thread 
+                                  (lambda () 
+                                    (neuron-loop neuron))
+                                    :name (make-neuron-thread-name neuron)))
+    t))
 
 (defmethod enable ((neurons list))
-  (loop for neuron in neurons collect (enable neuron)))
-
+  (loop for neuron in neurons counting (enable neuron)))
 
 (defmethod enable ((neurons dlist))
   (loop for neuron-node = (head neurons) then (next neuron-node)
         while neuron-node
-        collect (enable (value neuron-node))))
+        counting (enable (value neuron-node))))
 
 (defmethod disable ((neuron t-neuron))
-  (when (and (enabled neuron)
-             (and (activation-thread neuron)
-                  (thread-alive-p (activation-thread neuron))))
-    (let ((name (thread-name (activation-thread neuron))))
-      (setf (enabled neuron) nil)
-      (open-gate (transfer-gate neuron))
-      (join-thread (activation-thread neuron))
-      (setf (activation-thread neuron) nil)
-      name)))
+  (when (enabled neuron)
+    (when (or (not (neuron-thread neuron))
+              (and (neuron-thread neuron)
+                   (not (thread-alive-p (neuron-thread neuron)))))
+      (error "Neuron thread ~ais not running while neuron enabled"
+             (if (neuron-thread neuron)
+                 ""
+                 (format nil "~a " 
+                         (thread-name (neuron-thread neuron))))))
+    (let ((name (thread-name (neuron-thread neuron))))
+      (join-thread (neuron-thread neuron))
+      (setf (neuron-thread neuron) nil
+            (enabled neuron) nil)
+      t)))
 
 (defmethod disable ((neurons list))
   (loop for neuron in neurons collect (disable neuron)))
 
-(defmethod activate ((neuron t-neuron))
-  (loop
-    while (enabled neuron)
-    do
-       (wait-on-gate (transfer-gate neuron))
-       (when (enabled neuron)
-         (transfer neuron)
-         (loop
-           for cx-node = (head (outgoing neuron)) then (next cx-node)
-           while cx-node
-           for cx = (value cx-node)
-           for value = (* (output neuron) (weight cx))
-           for log = (dlog "~a: sending ~,4f to ~a"
-                           (id neuron) value (id (target cx)))
-           do (excite (target cx) value)
-              (incf (fire-count cx))))
-       (dlog "~a: closing transfer-gate" (id neuron))
-       (close-gate (transfer-gate neuron))
-       (dlog "~a: transfer-gate closed" (id neuron))))
+(defmethod transfer ((neuron t-neuron))
+  (with-mutex ((input-mtx neuron))
+    (setf (output neuron) (funcall (transfer-function neuron) (input neuron))
+          (input neuron) 0.0
+          (excited neuron) nil
+          (excitation-count neuron) 0)))
+
+(defmethod fire-output ((neuron t-neuron))
+  (loop for cx-node = (head (outgoing neuron)) then (next cx-node)
+        while cx-node
+        for cx = (value cx-node)
+        for target = (target cx)
+        do (excite target (* (output neuron) (weight cx)))))
+
+(defmethod transfer-error ((neuron t-neuron))
+  (with-mutex ((err-input-mtx neuron))
+    (setf (err neuron) (funcall (transfer-derivative neuron) (err-input neuron))
+          (err-input neuron) 0.0
+          (modulated neuron) nil
+          (modulation-count neuron) 0)))
+
+(defmethod neuron-loop ((neuron t-neuron))
+  (loop while t
+        do (when (excited neuron)
+             (transfer neuron)
+             (fire-output neuron)
+             (incf (ff-count neuron)))
+           (when (modulated neuron)
+             (transfer-error neuron)
+             (fire-error neuron)
+             (incf (bp-count neuron)))
+           (close-gate (gate neuron))
+           (wait-on-gate (gate neuron))))
 
 (defun default-weight ()
   (let ((weight-amplitude 0.3)
@@ -338,55 +378,72 @@ not open, this function does nothing."
   (with-mutex ((input-mtx neuron))
     (when (enabled neuron)
       (incf (input neuron) value)
-      (incf (received neuron))
+      (incf (excitation-count neuron))
       (when (or (zerop (len (incoming neuron)))
-                (= (received neuron) (len (incoming neuron))))
-        (dlog "~a: opening transfer-gate" (id neuron))
-        (open-gate (transfer-gate neuron))
-        (dlog "~a: transfer-gate is open" (id neuron))
-        t))))
+                (= (excitation-count neuron) (len (incoming neuron))))
+        (setf (excited neuron) t)
+        (open-gate (gate neuron))))))
 
 (defmethod excite ((neurons list) (values list))
   (loop for neuron in neurons
         for value in values
         counting (excite neuron value)))
 
-(defmethod transfer ((neuron t-neuron))
-  (setf (output neuron) (funcall (transfer-function neuron) (input neuron)))
-  (incf (transfer-count neuron))
-  (unless (biased neuron)
-    (with-mutex ((input-mtx neuron))
-      (setf (input neuron) 0.0
-            (received neuron) 0)))
-  (with-mutex ((err-mtx neuron))
-    (setf (err neuron) 0.0)))
+(defmethod excite ((neurons dlist) (values list))
+  (loop for neuron-node = (head neurons) then (next neuron-node)
+        for value in values
+        while neuron-node
+        for neuron = (value neuron-node)
+        counting (excite neuron value)))
+
+(defmethod fire-error ((neuron t-neuron))
+  (loop for cx-node = (head (incoming neuron)) then (next cx-node)
+        while cx-node
+        for cx = (value cx-node)
+        for upstream-neuron = (source cx)
+        for weight = (weight cx)
+        do (modulate upstream-neuron (* (err neuron) (weight cx)))))
+
+(defmethod modulate ((neuron t-neuron) err)
+  (with-mutex ((err-input-mutex neuron))
+    (when (enabled neuron)
+      (incf (err-input neuron) err)
+      (incf (modulation-count neuron))
+      (when (or (zerop (len (outgoing neuron)))
+                (= (modulation-count neuron) (len (outgoing neuron))))
+        (setf (modulated neuron) t)
+        (open-gate (gate neuron))))))
 
 (defun list-neuron-threads ()
   (remove-if-not
-   (lambda (th) (scan "^nt-" (thread-name th)))
+   (lambda (th) (scan (format nil "^~a" *neuron-thread-name-prefix*)
+                      (thread-name th)))
    (list-all-threads)))
 
-(defmethod list-cxs ((neuron t-neuron))
-  (loop for cx-node = (head (outgoing neuron)) then (next cx-node)
+(defmethod list-incoming ((neuron t-neuron))
+  (loop for cx-node = (head (incoming neuron)) then (next cx-node)
         while cx-node
         collect (value cx-node)))
 
-(defmethod list-cxs ((neurons list))
+(defmethod list-incoming ((neurons list))
   (loop for neuron in neurons
-        append (list-cxs neuron)))
+        append (list-incoming neuron)))
 
-(defmethod list-cxs ((neurons dlist))
+(defmethod list-incoming ((neurons dlist))
   (loop for neuron-node = (head neurons) then (next neuron-node)
         while neuron-node
-        append (list-cxs (value neuron-node))))
+        append (list-incoming (value neuron-node))))
 
-(defmethod list-weights ((neuron t-neuron))
+(defmethod list-incoming-weights ((neuron t-neuron))
   (mapcar (lambda (cx)
             (list :source (name (source cx))
                   :target (name (target cx))
                   :weight (weight cx)
                   :fire-count (fire-count cx)))
-          (list-cxs neuron)))
+          (list-incoming neuron)))
 
-(defmethod list-weights ((neurons list))
-  (loop for neuron in neurons appending (list-weights neuron)))
+(defmethod list-incoming-weights ((neurons list))
+  (loop for neuron in neurons appending (list-incoming-weights neuron)))
+
+(defmethod list-outputs ((neurons list))
+  (loop for neuron in neurons collect (output neuron)))

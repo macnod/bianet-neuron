@@ -3,6 +3,7 @@
   (:export
    activation-count
    biased
+   bp-count
    connect
    delta
    disable
@@ -10,18 +11,21 @@
    enable
    enabled
    err
-   err-derivative
+   err-input
+   excitation-count
    excite
-   expected-output
-   fire-count
+   ff-count
    id
    incoming
    input
    isolate
    learning-rate
-   list-cxs
+   list-incoming
+   list-incoming-weights
    list-neuron-threads
-   list-weights
+   list-outputs
+   modulated
+   modulation-count
    momentum
    name
    outgoing
@@ -31,10 +35,9 @@
    t-neuron
    target
    transfer-count
+   transfer-function
+   transfer-derivative
    update-count
    weight
    weight-history
-   x-coor
-   y-coor
-   z-coor
    ))
