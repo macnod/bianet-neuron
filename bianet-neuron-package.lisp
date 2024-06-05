@@ -2,9 +2,13 @@
   (:use :cl :dc-dlist :dc-eclectic :sb-concurrency :sb-thread :cl-ppcre)
   (:export
    activation-count
+   adjust-weight
+   apply-inputs
+   apply-error
    biased
    bp-count
    connect
+   t-cx
    delta
    disable
    disconnect
@@ -14,30 +18,49 @@
    err-input
    excitation-count
    excite
+   feed-forward
    ff-count
    id
    incoming
    input
    isolate
+   last-err
+   last-err-input
+   last-input
+   last-weight
+   layer
    learning-rate
    list-incoming
    list-incoming-weights
    list-neuron-threads
+   list-outgoing
    list-outputs
+   make-simple-network
+   modulate
    modulated
    modulation-count
    momentum
    name
+   weight-history
    outgoing
    output
+   output-layer-error
    received
    source
    t-neuron
    target
+   train-frame
+   transfer
    transfer-count
+   transfer-error
    transfer-function
    transfer-derivative
    update-count
+   wait-for-backprop
+   wait-for-backprop-p
+   wait-for-output
+   wait-for-output-p
    weight
-   weight-history
+   with-neurons
+   with-simple-network
    ))
