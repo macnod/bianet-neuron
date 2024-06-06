@@ -469,20 +469,42 @@
                             ((1 0) (1))
                             ((1 1) (0)))))
         (enable neurons)
-        (loop with l = (length training-set)
-              for i from 1 to iterations
-              for frame = (aref training-set (mod i 4))
-              do (train-frame input-layer output-layer frame))
-        (ok (loop for (inputs expected-outputs) across training-set
-                  for outputs = (feed-forward input-layer output-layer inputs)
-                  for error = (output-layer-error output-layer expected-outputs)
-                  do (diag
-                      (format nil "(~f, ~f) -> (~,3f) [~f]; e=~,5f"
-                              (first inputs) (second inputs)
-                              (first outputs)
-                              (first expected-outputs)
-                              error))
-                  finally (return (< error 0.05)))
-            "XOR training successful")))))
+        (pass
+         (loop with l = (length training-set)
+               and start-time = (mark-time)
+               for i from 1 to iterations
+               for frame = (aref training-set (mod i 4))
+               for start-time-tf = (mark-time)
+               for tf-time = (progn
+                               (train-frame input-layer output-layer frame)
+                               (elapsed-time start-time-tf))
+               for tf-max = tf-time then (if (> tf-time tf-max) tf-time tf-max)
+               for tf-min = tf-time then (if (< tf-time tf-min) tf-time tf-min)
+               summing tf-time into tf-total
+               finally 
+                  (return
+                    (format 
+                     nil
+                     "pCnt=~:d pTot=~,3fs; pAvg=~,3fs; pMin=~,3fs; pMax=~,3fs"
+                     iterations 
+                     (elapsed-time start-time)
+                     (/ tf-total iterations)
+                     tf-min
+                     tf-max))))
+        (loop with start-time = (mark-time)
+              for (inputs expected-outputs) across training-set
+              for outputs = (feed-forward input-layer output-layer inputs)
+              for error = (output-layer-error output-layer expected-outputs)
+              do (diag
+                  (format nil "(~f, ~f) -> (~,3f) [~f]; e=~,5f"
+                          (first inputs) (second inputs)
+                          (first outputs)
+                          (first expected-outputs)
+                          error))
+              finally 
+                 (ok (< error 0.05)
+                     (format
+                      nil "XOR set inference successful after ~,1f seconds"
+                      (elapsed-time start-time))))))))
 
 (finalize)

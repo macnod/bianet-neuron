@@ -332,19 +332,12 @@ not open, this function does nothing."
 (defmethod excite ((neuron t-neuron) value)
   (with-mutex ((neuron-mutex neuron))
     (when (enabled neuron)
-      (dlog "exciting neuron ~a with value ~f" 
-            (name neuron) value)
       (incf (input neuron) value)
       (incf (excitation-count neuron))
       (when (or (zerop (len (incoming neuron)))
                 (= (excitation-count neuron) (len (incoming neuron))))
         (setf (excited neuron) t)
-        (dlog "neuron ~a opening gate, which was previously ~a"
-              (name neuron)
-              (if (open-gate (gate neuron)) "closed" "already open"))
-        (dlog "neuron ~a gate is now ~a"
-              (name neuron)
-              (if (gate-open-p (gate neuron)) "open" "closed")))
+        (open-gate (gate neuron)))
       t)))
 
 (defmethod fire-error ((neuron t-neuron))
