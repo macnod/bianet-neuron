@@ -3,13 +3,13 @@
 (require :prove)
 (require :dc-dlist)
 (require :dc-eclectic)
+(require :bianet-mesh)
+
 (defpackage :bianet-neuron-tests
-  (:use :cl :prove :dc-eclectic :bianet-neuron :dc-dlist :sb-thread))
+  (:use :cl :prove :dc-eclectic :bianet-neuron :dc-dlist :sb-thread :bianet-mesh))
 (in-package :bianet-neuron-tests)
 
 (setf prove:*enable-colors* t)
-
-(defparameter *wait-timeout* 0.01)
 
 (defun round-to-n-decimals (x n)
   (float (/ (truncate (* x (expt 10 n))) (expt 10 n))))
@@ -178,7 +178,7 @@
 (subtest "Connect 2 neurons manually"
   (let ((name "foxtrot"))
     (with-neurons (neurons 2 name)
-      (is-type (connect (first neurons) (second neurons)) 
+      (is-type (connect (first neurons) (second neurons) :weight 0.5)
                't-cx
                (format nil "Connected two ~s neurons" name))
       (is (length (list-outgoing neurons)) 1 "One connection total")
@@ -252,6 +252,7 @@
                           for b = 0.0 then (+ b step)
                           collect (sin b)))
            (weights-stack (copy-seq weights)))
+
       (subtest "Create 2 13 1 network with one bias and sin weights"
         (setf (biased biased-neuron) t)
         (let ((biased-functions (getf bianet-neuron::*transfer-functions*

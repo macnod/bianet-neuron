@@ -4,8 +4,9 @@
 (require :dc-dlist)
 (require :dc-eclectic)
 (require :vgplot)
+(require :bianet-mesh)
 (defpackage :bianet-neuron-test-work
-  (:use :cl :prove :dc-eclectic :bianet-neuron :dc-dlist :sb-thread))
+  (:use :cl :prove :dc-eclectic :bianet-neuron :dc-dlist :sb-thread :bianet-mesh))
 (in-package :bianet-neuron-test-work)
 
 (setf prove:*enable-colors* t)

@@ -35,7 +35,6 @@
    list-neuron-threads
    list-outgoing
    list-outputs
-   make-simple-network
    modulate
    modulated
    modulation-count
@@ -62,5 +61,4 @@
    wait-for-output-p
    weight
    with-neurons
-   with-simple-network
    ))
