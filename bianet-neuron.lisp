@@ -257,13 +257,13 @@ not open, this function does nothing."
 (defmethod neuron-loop ((neuron t-neuron))
   (loop while (enabled neuron)
         do (evaluate-input-messages neuron)
+           (evaluate-error-messages neuron)
         when (excited neuron) do
           (transfer neuron)
           (fire-output neuron)
           (incf (ff-count neuron))
           (setf (excited neuron) nil
                 (excitation-count neuron) 0)
-        do (evaluate-error-messages neuron)
         when (modulated neuron) do
           (transfer-error neuron)
           (fire-error neuron)

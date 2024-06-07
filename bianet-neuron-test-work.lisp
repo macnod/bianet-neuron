@@ -48,7 +48,7 @@
   (subtest (format nil "Simple 8-layer network ~s full trainining" name)
     (with-simple-network
         (neurons input-layer hidden-layers output-layer name
-                 2 12 1)
+                 2 11 1)
       (let ((iterations 16000)
             (training-set #(((0 0) (0))
                             ((0 1) (1))
