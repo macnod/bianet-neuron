@@ -7,7 +7,9 @@
    apply-error
    biased
    bp-count
+   close-log
    connect
+   dlog
    t-cx
    delta
    disable
@@ -27,6 +29,7 @@
    last-err
    last-err-input
    last-input
+   last-output
    last-weight
    layer
    learning-rate
@@ -41,6 +44,7 @@
    momentum
    name
    weight-history
+   open-log
    outgoing
    output
    output-layer-error

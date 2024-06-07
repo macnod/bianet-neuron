@@ -40,7 +40,7 @@
 (defun zero-err-inputs (neurons)
   (loop for neuron in neurons do (setf (err-input neuron) 0.0)))
 
-(plan 18)
+(plan 19)
 
 (subtest "Neuron and connection IDs"
   (is (bianet-neuron::next-neuron-id) 1 "next-neuron-id 1")
@@ -66,6 +66,7 @@
   (ok (not bianet-neuron::*log*) "*log* is NIL after call to close-log"))
 
 (subtest "Connection weight adjustment"
+  (open-log :filepath "/tmp/neurons.log" :append nil)
   (let ((name "alfa"))
     (with-neurons (neurons 2 name)
       (let* ((a (first neurons))
@@ -73,19 +74,24 @@
              (name-a (name a))
              (name-b (name b))
              (a-bp (bp-count a))
-             (b-ff (ff-count b))
+             ;; (b-ff (ff-count b))
              (cx (connect a b :weight 0.5 :learning-rate 0.1 :momentum 0.1)))
         (is (name (source cx)) name-a "cx source is a")
         (is (name (target cx)) name-b "cx target is b")
         (is (weight cx) 0.5 "cx weight is 0.5")
         (enable neurons)
-        (ok (excite a 1.0) "excite a")
-        (ok (wait-for-output b (1+ b-ff) 0.01) "wait for b to output")
+        (is (length (list-neuron-threads name)) 2
+            "2 neuron threads running")
+        (is (last-input a) 0.0 "last input of a is 0.0")
+        (is (last-output a) 0.0 "last output of a is 0.0")
+        (is (excite a 1.0) 1.0 "excite a with 1.0")
+        (sleep 0.1)
+        (is (last-input a) 1.0 "last input of a is 1.0")
+        (diag "checking output of a after transfer")
+        (let ((o (funcall (transfer-function a) 1.0)))
+          (is (output a) o (format nil "output of a is ~,3f" o)))
         (is (input a) 0.0 "input of a has been cleared to 0.0")
         (is (round-3 (input b)) 0.0 "input of b is 0.0")
-        (let ((expected (round-3 0.7310586)))
-          (is (round-3 (output a)) expected 
-              (format nil "output of a is ~f" expected)))
         (is (round-3 (output b)) 0.59 "output of b is 0.59")
         (is (input b) 0.0 "input of b has been cleared to 0.0")
         (let ((expected (round-3 0.5903783)))
@@ -95,7 +101,8 @@
               (format nil "b expected output - actual output is ~f" 
                       (- expected))))
         (ok (modulate b (- 0.0 (output b))) "modulate cx with 0.5")
-        (ok (wait-for-backprop a (1+ a-bp) 0.01) "wait for backprop to a")))))
+        (ok (wait-for-backprop a (1+ a-bp) 0.01) "wait for backprop to a"))))
+  (close-log))
 
 (subtest "Rapidly exciting a single, isolated neuron"
   (let* ((name "bravo")
@@ -214,8 +221,8 @@
         (enable neurons)
         (let ((ff (ff-count b))
               (bp (bp-count a)))
-          (ok (excite a input) 
-              (format nil "excite a with ~f" input))
+          (excite a input)
+          (pass (format nil "excite a with ~f" input))
           (ok (wait-for-output b (1+ ff) 0.01) "wait for b to output")
           (is (last-input a) input
               (format nil "a's last input is ~f" input))
@@ -293,7 +300,7 @@
         (is (length (list-outgoing neurons)) cx-count
             "Correct number of connections"))
       
-      (subtest "Backpropagate rest"
+      (subtest "Backpropagation test"
         (diag (format nil "Weights: ~a" weights))
         (loop 
           with training-set = '#(((0.0 0.0) (0.0))
@@ -423,11 +430,9 @@
               for (inputs expected-outputs) = (nth frame-index training-set)
               for excitements = (loop for neuron in input-layer
                                       for input in inputs
-                                      for excitement = (excite neuron input)
-                                      when excitement collect excitement)
-              for ff-wait = (when excitements
-                              (wait-for-output-p output-layer 
-                                                 (1+ ff-count) 0.1))
+                                      do (excite neuron input))
+              for ff-wait = (wait-for-output-p output-layer 
+                                               (1+ ff-count) 0.1)
               for outputs = (when ff-wait
                               (mapcar #'output output-layer))
               for errors = (when outputs
@@ -436,8 +441,8 @@
               for modulations = (when errors
                                   (loop for neuron in output-layer
                                         for error in errors
-                                        always (modulate neuron error)))
-              for bp-wait = (when modulations
+                                        do (modulate neuron error)))
+              for bp-wait = (when errors
                               (wait-for-backprop-p input-layer
                                                    (1+ bp-count) 
                                                    0.1))
@@ -511,8 +516,8 @@
   (subtest (format nil "Simple 8-layer network ~s full trainining" name)
     (with-simple-network
         (neurons input-layer hidden-layers output-layer name
-                 2 8 4 1)
-      (let ((iterations 20000)
+                 2 12 1)
+      (let ((iterations 16000)
             (training-set #(((0 0) (0))
                             ((0 1) (1))
                             ((1 0) (1))

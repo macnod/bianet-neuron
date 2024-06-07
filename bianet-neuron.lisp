@@ -131,6 +131,7 @@ not open, this function does nothing."
    (transfer-function :accessor transfer-function :type function)
    (transfer-derivative :accessor transfer-derivative :type function)
    (output :accessor output :type float :initform 0.0)
+   (last-output :accessor last-output :type float :initform 0.0)
    (err :accessor err :type float :initform 0.0)
    (err-input :accessor err-input :type float :initform 0.0)
    (last-err-input :accessor last-err-input :type float :initform 0.0)
@@ -140,12 +141,12 @@ not open, this function does nothing."
    (modulated :accessor modulated :type boolean :initform nil)
    (incoming :accessor incoming :type dlist :initform (make-instance 'dlist))
    (outgoing :accessor outgoing :type dlist :initform (make-instance 'dlist))
-   (gate :accessor gate)
    (enabled :accessor enabled :type boolean :initform nil)
    (neuron-thread :accessor neuron-thread :initform nil)
    (ff-count :accessor ff-count :type integer :initform 0)
    (bp-count :accessor bp-count :type integer :initform 0)
-   (neuron-mutex :accessor neuron-mutex :type mutex :initform (make-mutex))))
+   (i-mailbox :accessor i-mailbox :type mailbox :initform (make-mailbox))
+   (e-mailbox :accessor e-mailbox :type mailbox :initform (make-mailbox))))
 
 (defmethod initialize-instance :after ((neuron t-neuron) &key)
   (when (zerop (length (name neuron)))
@@ -155,12 +156,7 @@ not open, this function does nothing."
     (setf (transfer-function neuron)
           (getf transfer :function)
           (transfer-derivative neuron)
-          (getf transfer :derivative)))
-  (setf (gate neuron) 
-        ;; A neuron's gate and the neuron share the same name
-        (make-gate :name (name neuron) :open nil))
-  (setf (neuron-mutex neuron)
-        (make-mutex :name (format nil "n-~a" (name neuron)))))
+          (getf transfer :derivative))))
 
 (defmethod make-neuron-name ((neuron t-neuron))
   (format nil "~a~9,'0d" *neuron-name-prefix* (id neuron)))
@@ -172,7 +168,6 @@ not open, this function does nothing."
         (error "Neuron thread ~a is running while neuron not enabled"
                (thread-name (neuron-thread neuron))))
       (terminate-thread (neuron-thread neuron)))
-    (close-gate (gate neuron))
     (setf (enabled neuron) t
           (excited neuron) nil
           (modulated neuron) nil
@@ -197,12 +192,25 @@ not open, this function does nothing."
     disabled))
 
 (defmethod transfer ((neuron t-neuron))
-  (setf (output neuron) (funcall (transfer-function neuron) (input neuron))
-        (last-input neuron) (input neuron)
-        (input neuron) 0.0)
-  (output neuron))
+  (let ((new-output (funcall (transfer-function neuron) (input neuron))))
+    (setf (last-output neuron) (output neuron)
+          (output neuron) new-output
+          (last-input neuron) (input neuron)
+          (input neuron) 0.0)
+    (dlog "Thread ~a in neuron ~a transferring input (~,3f) to output (~,3f)"
+          (when (neuron-thread neuron)
+            (thread-name (neuron-thread neuron)))
+          (name neuron)
+          (last-input neuron)
+          (output neuron))
+    (output neuron)))
 
 (defmethod fire-output ((neuron t-neuron))
+  (dlog "Thread ~a firing output of neuron ~a (~,3f)"
+        (when (neuron-thread neuron)
+          (thread-name (neuron-thread neuron)))
+        (name neuron)
+        (output neuron))
   (loop for cx-node = (head (outgoing neuron)) then (next cx-node)
         while cx-node
         for cx = (value cx-node)
@@ -248,21 +256,21 @@ not open, this function does nothing."
 
 (defmethod neuron-loop ((neuron t-neuron))
   (loop while (enabled neuron)
-        do (with-mutex ((neuron-mutex neuron))
-             (when (excited neuron)
-               (transfer neuron)
-               (fire-output neuron)
-               (incf (ff-count neuron))
-               (setf (excited neuron) nil
-                     (excitation-count neuron) 0))
-             (when (modulated neuron)
-               (transfer-error neuron)
-               (fire-error neuron)
-               (adjust-weights neuron)
-               (incf (bp-count neuron))
-               (setf (modulated neuron) nil
-                     (modulation-count neuron) 0)))
-           (wait-on-gate (gate neuron))))
+        do (evaluate-input-messages neuron)
+        when (excited neuron) do
+          (transfer neuron)
+          (fire-output neuron)
+          (incf (ff-count neuron))
+          (setf (excited neuron) nil
+                (excitation-count neuron) 0)
+        do (evaluate-error-messages neuron)
+        when (modulated neuron) do
+          (transfer-error neuron)
+          (fire-error neuron)
+          (adjust-weights neuron)
+          (incf (bp-count neuron))
+          (setf (modulated neuron) nil
+                (modulation-count neuron) 0)))
 
 (defmethod connect ((source t-neuron) 
                     (target t-neuron) 
@@ -270,47 +278,43 @@ not open, this function does nothing."
                       (weight (error "weight is required"))
                       (learning-rate *default-learning-rate*)
                       (momentum *default-momentum*))
-  (with-mutex ((neuron-mutex source))
-    (with-mutex ((neuron-mutex target))
-      (when (and
-             (loop
-               for cx-node = (head (outgoing source)) then (next cx-node)
-               while cx-node
-               for cx = (value cx-node)
-               for cx-target = (target cx)
-               never (= (id target) (id cx-target)))
-             (loop
-               for cx-node = (head (incoming target)) then (next cx-node)
-               while cx-node
-               for cx = (value cx-node)
-               for cx-source = (source cx)
-               never (= (id source) (id cx-source))))
-        (let ((cx (make-instance 't-cx
-                                 :momentum momentum
-                                 :learning-rate learning-rate
-                                 :weight weight
-                                 :source source
-                                 :target target)))
-          (push-tail (outgoing source) cx)
-          (push-tail (incoming target) cx)
-          cx)))))
+  (when (and
+         (loop
+           for cx-node = (head (outgoing source)) then (next cx-node)
+           while cx-node
+           for cx = (value cx-node)
+           for cx-target = (target cx)
+           never (= (id target) (id cx-target)))
+         (loop
+           for cx-node = (head (incoming target)) then (next cx-node)
+           while cx-node
+           for cx = (value cx-node)
+           for cx-source = (source cx)
+           never (= (id source) (id cx-source))))
+    (let ((cx (make-instance 't-cx
+                             :momentum momentum
+                             :learning-rate learning-rate
+                             :weight weight
+                             :source source
+                             :target target)))
+      (push-tail (outgoing source) cx)
+      (push-tail (incoming target) cx)
+      cx)))
 
 (defmethod disconnect ((source t-neuron) (target t-neuron))
-  (with-mutex ((neuron-mutex source))
-    (with-mutex ((neuron-mutex target))
-      (loop for cx-node = (head (outgoing source)) then (next cx-node)
-            while cx-node
-            for cx = (value cx-node)
-            for cx-target = (target cx)
-            when (= (id target) (id cx-target))
-              do (delete-node (outgoing source) cx-node))
-      (loop for cx-node = (head (incoming target)) then (next cx-node)
-            while cx-node
-            for cx = (value cx-node)
-            for cx-source = (source cx)
-            when (= (id source) (id cx-source))
-              do (delete-node (incoming target) cx-node)
-                 (return cx)))))
+  (loop for cx-node = (head (outgoing source)) then (next cx-node)
+        while cx-node
+        for cx = (value cx-node)
+        for cx-target = (target cx)
+        when (= (id target) (id cx-target))
+          do (delete-node (outgoing source) cx-node))
+  (loop for cx-node = (head (incoming target)) then (next cx-node)
+        while cx-node
+        for cx = (value cx-node)
+        for cx-source = (source cx)
+        when (= (id source) (id cx-source))
+          do (delete-node (incoming target) cx-node)
+             (return cx)))
 
 (defmethod isolate ((neuron t-neuron))
   (let ((source (loop
@@ -329,16 +333,37 @@ not open, this function does nothing."
                   counting cx)))
     (list :incoming source :outgoing target)))
 
+(defmethod evaluate-input-messages ((neuron t-neuron))
+  (loop until (mailbox-empty-p (i-mailbox neuron))
+        for value = (receive-message (i-mailbox neuron))
+        for log = (dlog "Thread ~a in neuron ~a received value ~,3f"
+                        (when (neuron-thread neuron)
+                          (thread-name (neuron-thread neuron)))
+                        (name neuron)
+                        value)
+        do (excite-internal neuron value)))
+
+(defmethod evaluate-error-messages ((neuron t-neuron))
+  (loop until (mailbox-empty-p (e-mailbox neuron))
+        for err = (receive-message (e-mailbox neuron))
+        do (modulate-internal neuron err)))
+
+(defmethod excite-internal ((neuron t-neuron) value)
+  (dlog "Thread ~a in neuron ~a exciting with ~,3f"
+        (when (neuron-thread neuron)
+          (thread-name (neuron-thread neuron)))
+        (name neuron)
+        value)
+  (incf (input neuron) value)
+  (incf (excitation-count neuron))
+  (when (or (zerop (len (incoming neuron)))
+            (= (excitation-count neuron) (len (incoming neuron))))
+    (dlog "Setting neuron ~a to excited" (name neuron))
+    (setf (excited neuron) t)))
+
 (defmethod excite ((neuron t-neuron) value)
-  (with-mutex ((neuron-mutex neuron))
-    (when (enabled neuron)
-      (incf (input neuron) value)
-      (incf (excitation-count neuron))
-      (when (or (zerop (len (incoming neuron)))
-                (= (excitation-count neuron) (len (incoming neuron))))
-        (setf (excited neuron) t)
-        (open-gate (gate neuron)))
-      t)))
+  (send-message (i-mailbox neuron) value)
+  value)
 
 (defmethod fire-error ((neuron t-neuron))
   (loop for cx-node = (head (incoming neuron)) then (next cx-node)
@@ -349,16 +374,16 @@ not open, this function does nothing."
         for err = (err neuron)
         do (modulate upstream-neuron (* err weight))))
 
+(defmethod modulate-internal ((neuron t-neuron) err)
+  (incf (err-input neuron) err)
+  (incf (modulation-count neuron))
+  (when (or (zerop (len (outgoing neuron)))
+            (= (modulation-count neuron) (len (outgoing neuron))))
+    (setf (modulated neuron) t)))
+
 (defmethod modulate ((neuron t-neuron) err)
-  (with-mutex ((neuron-mutex neuron))
-    (when (enabled neuron)
-      (incf (err-input neuron) err)
-      (incf (modulation-count neuron))
-      (when (or (zerop (len (outgoing neuron)))
-                (= (modulation-count neuron) (len (outgoing neuron))))
-        (setf (modulated neuron) t)
-        (open-gate (gate neuron)))
-      t)))
+  (send-message (e-mailbox neuron) err)
+  err)
 
 (defun list-neuron-threads (name-prefix)
   (remove-if-not
@@ -386,7 +411,7 @@ not open, this function does nothing."
   (loop for neuron in neurons appending (list-incoming-weights neuron)))
 
 (defmethod wait-for-output ((neuron t-neuron) 
-                            (target-ff-count integer) 
+                            (target-ff-count integer)
                             (timeout-seconds float))
   (loop with start-time = (mark-time)
         while (< (ff-count neuron) target-ff-count)
