@@ -176,7 +176,7 @@
         (format nil "All ~s threads cleand up" name))))
 
 (subtest "Connect 2 neurons manually"
-  (let ((name "foxtrot"))
+  (let ((name "golf"))
     (with-neurons (neurons 2 name)
       (is-type (connect (first neurons) (second neurons) :weight 0.5)
                't-cx
@@ -197,7 +197,7 @@
             "Target of connection is the second neuron")))))
 
 (subtest "2 relu neurons with 1 connection 1 -> 1; 0 -> 0"
-  (let ((name "golf"))
+  (let ((name "hotel"))
     (with-neurons (neurons 2 name)
       (loop for neuron in neurons do
         (setf (transfer-function neuron) #'bianet-neuron::relu)
@@ -239,7 +239,7 @@
             (is (last-err-input a) (* 1.0 0.25) "last-err-input a is 0.25")
             (is (err a) 0.25 "err a is 0.25")))))))
 
-(let ((name "hotel"))
+(let ((name "india"))
   (with-neurons (neurons 10 name)
     (let* ((input-layer (subseq neurons 0 2))
            (hidden-layer (subseq neurons 2 9))
@@ -330,7 +330,7 @@
                                       expected))))))))
 
 (subtest "The with-simple-network macro assembles a network correctly"
-  (let ((name "india"))
+  (let ((name "juliet"))
     (with-simple-network 
         (neurons input-layer hidden-layers output-layer name 9 3 2)
       (is (length neurons) 15 (format nil "Created 15 ~s neurons" name))
@@ -356,7 +356,7 @@
       (is (length (list-neuron-threads "golf")) 0 
           (format nil "No ~s threads yet" name)))))
 
-(let ((name "juliet"))
+(let ((name "kilo"))
   (subtest (format nil "Simple 3-layer network ~s does feedforward" name)
     (with-simple-network
         (neurons input-layer hidden-layers output-layer name 2 3 2)
@@ -375,7 +375,7 @@
   (is (length (list-neuron-threads name)) 0 
       (format nil "All ~s threads cleand up" name)))
 
-(let ((name "kilo"))
+(let ((name "lima"))
   (subtest (format 
             nil 
             "Simple 3-layer network ~s does feedforward and backpropagation"
@@ -406,7 +406,7 @@
                     (ok (every (lambda (n) (not (zerop (err n)))) input-layer)
                         "Input neurons have non-zero error")))))
 
-(let ((name "lima"))
+(let ((name "mike"))
   (subtest (format nil "Simple 3-layer network ~s learns" name)
     (with-simple-network
         (neurons input-layer hidden-layers output-layer name 2 3 2)
@@ -443,7 +443,7 @@
                                                    0.1))
               finally (ok bp-wait "Network learns"))))))
 
-(let ((name "mike"))
+(let ((name "november"))
   (subtest (format nil "Simple 3-layer network ~s learns with train-frame" name)
     (with-simple-network
         (neurons input-layer hidden-layers output-layer name 2 7 1)
@@ -459,11 +459,11 @@
                   always (train-frame input-layer output-layer frame))
             "Network learns")))))
 
-(let ((name "november"))
+(let ((name "oscar"))
   (subtest (format nil "Simple 3-layer network ~s full trainining" name)
     (with-simple-network
         (neurons input-layer hidden-layers output-layer name 2 4 1)
-      (let ((iterations 1000)
+      (let ((iterations 10000)
             (training-set #(((0 0) (0))
                             ((0 1) (1))
                             ((1 0) (1))
@@ -507,4 +507,54 @@
                       nil "XOR set inference successful after ~,1f seconds"
                       (elapsed-time start-time))))))))
 
+(let ((name "papa"))
+  (subtest (format nil "Simple 8-layer network ~s full trainining" name)
+    (with-simple-network
+        (neurons input-layer hidden-layers output-layer name
+                 2 8 4 1)
+      (let ((iterations 20000)
+            (training-set #(((0 0) (0))
+                            ((0 1) (1))
+                            ((1 0) (1))
+                            ((1 1) (0)))))
+        (enable neurons)
+        (pass
+         (loop with l = (length training-set)
+               and start-time = (mark-time)
+               for i from 1 to iterations
+               for frame = (aref training-set (mod i 4))
+               for start-time-tf = (mark-time)
+               for tf-time = (progn
+                               (train-frame input-layer output-layer frame)
+                               (elapsed-time start-time-tf))
+               for tf-max = tf-time then (if (> tf-time tf-max) tf-time tf-max)
+               for tf-min = tf-time then (if (< tf-time tf-min) tf-time tf-min)
+               summing tf-time into tf-total
+               finally 
+                  (return
+                    (format 
+                     nil
+                     "pCnt=~:d pTot=~,3fs; pAvg=~,3fs; pMin=~,3fs; pMax=~,3fs"
+                     iterations
+                     (elapsed-time start-time)
+                     (/ tf-total iterations)
+                     tf-min
+                     tf-max))))
+        (loop with start-time = (mark-time)
+              for (inputs expected-outputs) across training-set
+              for outputs = (feed-forward input-layer output-layer inputs)
+              for error = (output-layer-error output-layer expected-outputs)
+              do (diag
+                  (format nil "(~f, ~f) -> (~,3f) [~f]; e=~,5f"
+                          (first inputs) (second inputs)
+                          (first outputs)
+                          (first expected-outputs)
+                          error))
+              finally 
+                 (ok (< error 0.05)
+                     (format
+                      nil "XOR set inference successful after ~,1f seconds"
+                      (elapsed-time start-time))))))))
+
 (finalize)
+
