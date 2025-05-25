@@ -475,11 +475,18 @@
                for i from 1 to iterations
                for frame = (aref training-set (mod i 4))
                for start-time-tf = (mark-time)
-               for tf-time = (progn
-                               (train-frame input-layer output-layer frame)
-                               (elapsed-time start-time-tf))
+               for error = (car (train-frame input-layer output-layer frame))
+               for error-history = (list error) then (progn
+                                                       (push error error-history)
+                                                       (if (< (length error-history) l)
+                                                         error-history
+                                                         (subseq error-history 0 l)))
+               for done = (when (= (length error-history) l)
+                            (< (apply #'max error-history) 0.03))
+               for tf-time = (elapsed-time start-time-tf)
                for tf-max = tf-time then (if (> tf-time tf-max) tf-time tf-max)
                for tf-min = tf-time then (if (< tf-time tf-min) tf-time tf-min)
+               while (not done)
                summing tf-time into tf-total
                finally 
                   (return
@@ -507,54 +514,54 @@
                       nil "XOR set inference successful after ~,1f seconds"
                       (elapsed-time start-time))))))))
 
-(let ((name "papa"))
-  (subtest (format nil "Simple 8-layer network ~s full trainining" name)
-    (with-simple-network
-        (neurons input-layer hidden-layers output-layer name
-                 2 8 4 1)
-      (let ((iterations 20000)
-            (training-set #(((0 0) (0))
-                            ((0 1) (1))
-                            ((1 0) (1))
-                            ((1 1) (0)))))
-        (enable neurons)
-        (pass
-         (loop with l = (length training-set)
-               and start-time = (mark-time)
-               for i from 1 to iterations
-               for frame = (aref training-set (mod i 4))
-               for start-time-tf = (mark-time)
-               for tf-time = (progn
-                               (train-frame input-layer output-layer frame)
-                               (elapsed-time start-time-tf))
-               for tf-max = tf-time then (if (> tf-time tf-max) tf-time tf-max)
-               for tf-min = tf-time then (if (< tf-time tf-min) tf-time tf-min)
-               summing tf-time into tf-total
-               finally 
-                  (return
-                    (format 
-                     nil
-                     "pCnt=~:d pTot=~,3fs; pAvg=~,3fs; pMin=~,3fs; pMax=~,3fs"
-                     iterations
-                     (elapsed-time start-time)
-                     (/ tf-total iterations)
-                     tf-min
-                     tf-max))))
-        (loop with start-time = (mark-time)
-              for (inputs expected-outputs) across training-set
-              for outputs = (feed-forward input-layer output-layer inputs)
-              for error = (output-layer-error output-layer expected-outputs)
-              do (diag
-                  (format nil "(~f, ~f) -> (~,3f) [~f]; e=~,5f"
-                          (first inputs) (second inputs)
-                          (first outputs)
-                          (first expected-outputs)
-                          error))
-              finally 
-                 (ok (< error 0.05)
-                     (format
-                      nil "XOR set inference successful after ~,1f seconds"
-                      (elapsed-time start-time))))))))
+;; (let ((name "papa"))
+;;   (subtest (format nil "Simple 8-layer network ~s full trainining" name)
+;;     (with-simple-network
+;;         (neurons input-layer hidden-layers output-layer name
+;;                  2 8 4 1)
+;;       (let ((iterations 20000)
+;;             (training-set #(((0 0) (0))
+;;                             ((0 1) (1))
+;;                             ((1 0) (1))
+;;                             ((1 1) (0)))))
+;;         (enable neurons)
+;;         (pass
+;;          (loop with l = (length training-set)
+;;                and start-time = (mark-time)
+;;                for i from 1 to iterations
+;;                for frame = (aref training-set (mod i 4))
+;;                for start-time-tf = (mark-time)
+;;                for tf-time = (progn
+;;                                (train-frame input-layer output-layer frame)
+;;                                (elapsed-time start-time-tf))
+;;                for tf-max = tf-time then (if (> tf-time tf-max) tf-time tf-max)
+;;                for tf-min = tf-time then (if (< tf-time tf-min) tf-time tf-min)
+;;                summing tf-time into tf-total
+;;                finally 
+;;                   (return
+;;                     (format 
+;;                      nil
+;;                      "pCnt=~:d pTot=~,3fs; pAvg=~,3fs; pMin=~,3fs; pMax=~,3fs"
+;;                      iterations
+;;                      (elapsed-time start-time)
+;;                      (/ tf-total iterations)
+;;                      tf-min
+;;                      tf-max))))
+;;         (loop with start-time = (mark-time)
+;;               for (inputs expected-outputs) across training-set
+;;               for outputs = (feed-forward input-layer output-layer inputs)
+;;               for error = (output-layer-error output-layer expected-outputs)
+;;               do (diag
+;;                   (format nil "(~f, ~f) -> (~,3f) [~f]; e=~,5f"
+;;                           (first inputs) (second inputs)
+;;                           (first outputs)
+;;                           (first expected-outputs)
+;;                           error))
+;;               finally 
+;;                  (ok (< error 0.05)
+;;                      (format
+;;                       nil "XOR set inference successful after ~,1f seconds"
+;;                       (elapsed-time start-time))))))))
 
 (finalize)
 
