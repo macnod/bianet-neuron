@@ -14,11 +14,11 @@ This approach sacrifices some efficiency (e.g., due to thread contention or dist
 [[./neuron.png]]
 The diagram shows a neuron with four components: Input Receiver, Output Transmitter, Modulation Receiver, and Modulation Transmitter, connected by processes like Excited and Modulated.
 ** Input Receiver
-The Input Receiver collects signals from other neurons and processes them through the `Excited` function, which checks if enough signals are received to activate the neuron. A background process monitors excitation and pauses when idle to save resources. The aggregated input is transformed by a transfer function into an output value.
+The Input Receiver collects signals from other neurons and processes them through the =Excited= function, which checks if enough signals are received to activate the neuron. A background process monitors excitation and pauses when idle to save resources. The aggregated input is transformed by a transfer function into an output value.
 ** Output Transmitter
 The Output Transmitter sends the neuron's output to downstream neurons via weighted connections, allowing fine-grained control over signal propagation.
 ** Modulation Receiver
-During backpropagation, downstream neurons send modulation signals to the Modulation Receiver. The `Modulated` function checks for sufficient signals, then uses the `Transfer Derivative` to compute the neuron's `Error`, which adjusts outgoing weights and is sent upstream.
+During backpropagation, downstream neurons send modulation signals to the Modulation Receiver. The =Modulated= function checks for sufficient signals, then uses the =Transfer Derivative= to compute the neuron's =Error=, which adjusts outgoing weights and is sent upstream.
 ** Modulation Transmitter
 The Modulation Transmitter propagates the neuron's error to upstream neurons, supporting backpropagation across the network.
 * Tests
