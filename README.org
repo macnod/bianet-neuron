@@ -1,0 +1,24 @@
+#+title: Bianet Neuron
+#+subtitle: An independent neuron that can be used in a neural network like bianet
+
+* Overview
+The idea behind this neuron design is that the neuron is not a data unit, as in the case of all popular neural-network frameworks that exist today, but rather an independent object. In principle, each neuron could run in a separate, geographically-distant computer. Furthermore, the fact that the neurons are independent allow you to build networks with graphs of any type, including cyclic graphs, where the output of a neuron later affects the neuron itself.
+
+This research is not immediately practical, for a number of reasons that all work against efficiency. For example, if you built a neural network with these neurons, and you assigned a thread to each neuron, you'd run into thread-contention issues. The same is true for thread pools, to some degree. Placing groups of these neurons in separate computers would degrade the communication bandwidth between the groups. Also, these neurons are doing a lot more than simply representing weights and transfer operations.
+
+The good news is that these neurons allow you to test connectivity patterns and transfer functions that resemble those in common neural-network frameworks, while at the same time allowing connetivity patterns, transfer functions, and operations that are not possible in common neural-network frameworks. For example, each neuron can have it's own transfer function. Also, connectivity patterns, transfer functions, and other attributes of neurons can change while the network is running. You could, for example, drop a neuron, it's connections, or even an entire layer of neurons from the network, including performing the necessary rewiring, while the network is training.
+* Neuron Diagram
+#+caption: Bianet Neuron Model
+[[./neuron.png]]
+** Input Receiver
+Receives signals from other neurons, passes them through =Excited=, and aggregates them in =Input=. =Excited= determines if the neuron has received enough signals from other neurons to deem the neuron as being excited. A thread or process runs in a tight loop, checking if the neuron is excited and then if the neuron is modulated. A gate pauses this tight loop if the neuron is not receiving input signals or modulations.
+
+When the neuron is excited, the aggregated input is run through a transfer function, and the output of the transfer function is placed in =Output=.
+** Output Transmitter
+When the transfer function completes, the output transmitter fires the output value to downstream neurons, through the neurons outgoing connections, which have independent weights.
+** Modulation Receiver
+In a process called _Backpropagation_, downstream neurons transmit modulation signals to the neuron, which the neuron receives at =Modulation Receiver=. Those signals are forwarded through =Modulated=, and aggregated in =Error Input=. =Modulated= determines of the neuron has received enough modulation signals, and when that happens, the =Transfer Derivative= function is used to compute the neuron's =Error=, which serves 2 purposes: (1) The error is used to alter the weights of the neuron's outgoing connections. (2) The error is transmitted to upstream neurons via the upstream-neurons' connections.
+** Modulation Transmitter
+The =Modulation Transmitter= propagates the neuron's error to upstream neurons.
+* Tests
+The Makefile currently runs tests and does nothing else. Therefore, you can call run it without any parameters: =make=.
