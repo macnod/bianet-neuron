@@ -1,4 +1,5 @@
-#+title: Bianet Neuron: A Neuron Simulation in Common Lisp
+#+title: Bianet Neuron
+#+subtitle: A Neuron Simulation in Common Lisp
 
 Bianet is an experimental neuron simulation in Common Lisp that models neurons as independent objects, enabling flexible network topologies and dynamic behaviors not possible in traditional neural network frameworks.
 
