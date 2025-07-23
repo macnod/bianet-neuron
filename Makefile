@@ -2,8 +2,8 @@ ROSWELL_PREFIX=$(HOME)/.local
 ROSWELL=$(ROSWELL_PREFIX)/bin/ros
 INSTALLED_SYSTEMS=$(HOME)/.roswell/lisp/quicklisp/dists/quicklisp/software
 INSTALLED_LOCAL=$(HOME)/.roswell/local-projects
-TESTS_FILE="$(HOME)/common-lisp/bianet-neuron/bianet-neuron-tests.lisp"
-TEST_WORK_FILE="$(HOME)/common-lisp/bianet-neuron/bianet-neuron-test-work.lisp"
+TESTS_FILE="bianet-neuron-tests.lisp"
+TEST_WORK_FILE="bianet-neuron-test-work.lisp"
 REPORTER=list
 
 APT_PACKAGES=automake \
