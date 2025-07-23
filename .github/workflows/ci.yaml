@@ -15,11 +15,11 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-  
+
   steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-  
+
     - name: Cache system packages
       id: cache-apt
       uses: awalsh128/cache-apt-pkgs-action@latest
