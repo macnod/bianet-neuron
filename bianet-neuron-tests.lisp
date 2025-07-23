@@ -1,12 +1,12 @@
 (in-package :cl-user)
 
-(pushnew (truename ".") asdf:*central-registry* :test 'equal)
-(asdf:load-system :bianet-neuron)
-
 (require :prove)
 (require :dc-dlist)
 (require :dc-eclectic)
 (require :bianet-mesh)
+
+(pushnew (truename ".") asdf:*central-registry* :test 'equal)
+(asdf:load-system :bianet-neuron)
 
 (defpackage :bianet-neuron-tests
   (:use :cl :prove :dc-eclectic :dc-dlist :sb-thread :bianet-neuron :bianet-mesh))
