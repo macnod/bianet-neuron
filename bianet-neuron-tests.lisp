@@ -1,12 +1,15 @@
 (in-package :cl-user)
-(require :bianet-neuron)
+
+(pushnew (truename ".") asdf:*central-registry* :test 'equal)
+(asdf:load-system :bianet-neuron)
+
 (require :prove)
 (require :dc-dlist)
 (require :dc-eclectic)
 (require :bianet-mesh)
 
 (defpackage :bianet-neuron-tests
-  (:use :cl :prove :dc-eclectic :bianet-neuron :dc-dlist :sb-thread :bianet-mesh))
+  (:use :cl :prove :dc-eclectic :dc-dlist :sb-thread :bianet-neuron :bianet-mesh))
 (in-package :bianet-neuron-tests)
 
 (setf prove:*enable-colors* t)
