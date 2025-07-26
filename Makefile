@@ -63,11 +63,10 @@ $(CL_PACKAGES):
 	fi
 
 test:
-	$(ROSWELL) run -- \
-		--eval "(ql:quickload :prove)" \
-		--eval "(require :prove)" \
-		--eval "(prove:run #P\"$(TESTS_FILE)\" :reporter :$(REPORTER))" \
-		--non-interactive
+	$(ROSWELL) run -- --eval "(require :prove)" \
+		--eval "(unless (prove:run (truename \"$(TESTS_FILE)\") :reporter :$(REPORTER)) (sb-ext:exit :code 1))" \
+		--non-interactive \
+		--quit
 
 work:
 	$(ROSWELL) run -- \
